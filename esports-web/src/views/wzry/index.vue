@@ -1,80 +1,97 @@
 <template>
-  <div class="home-page full-container">
-    <!-- 第一部分：轮播Banner -->
-    <div class="top-row">
-      <!-- 左侧：轮播图 -->
-      <div class="banner-box">
-        <el-carousel height="400px" trigger="click">
-          <el-carousel-item v-for="(item, index) in bannerList" :key="index">
-            <div 
-              class="banner-img" 
-              :style="{ backgroundImage: `url(${item.image})`, cursor: item.url ? 'pointer' : 'default' }"
-              @click="handleBannerClick(item.url)"
-            >
-              <div class="banner-title">{{ item.title }}</div>
-            </div>
-          </el-carousel-item>
-        </el-carousel>
-      </div>
-
-      <!-- 右侧：新闻与公告聚合版块 -->
-      <el-card class="notice-card" shadow="never">
-        <template #header>
-          <div class="card-header">
-            <span class="title">新闻与公告</span>
-            <el-button type="primary" link @click="$router.push('/wzry/news')">更多</el-button>
-          </div>
-        </template>
-        <div class="notice-list" v-loading="loading">
-          <!-- 混合展示新闻和公告 -->
-          <div 
-            v-for="(item, index) in mixedNews" 
-            :key="index" 
-            class="notice-item" 
-            @click="goNewsDetail(item)"
-          >
-            <el-tag :type="item.type === 'notice' ? 'warning' : 'success'" size="small" class="n-tag" effect="dark">
-              {{ item.type === 'notice' ? '公告' : '新闻' }}
-            </el-tag>
-            <span class="notice-text">{{ item.title }}</span>
-            <span class="notice-date">{{ formatDate(item.createTime).substring(5) }}</span>
-          </div>
-          <el-empty v-if="mixedNews.length === 0" :image-size="60" description="暂无资讯" />
+  <div class="wzry-home-page">
+    <div class="hero-section">
+      <div class="hero-content">
+        <h1>王者荣耀板块</h1>
+        <p>欢迎来到王者荣耀电竞专区，这里是高校王者荣耀战队的集结地</p>
+        <div class="hero-buttons">
+          <el-button type="primary" size="large" @click="$router.push('/wzry/team')">浏览战队</el-button>
+          <el-button size="large" @click="$router.push('/wzry/match')">查看约战</el-button>
         </div>
-      </el-card>
+      </div>
     </div>
 
-    <!-- 第二部分：功能介绍 -->
-    <div class="section-container">
+    <div class="section-wrapper">
       <div class="section-header">
-        <h2>王者荣耀板块</h2>
+        <h2 class="section-title">热门战队</h2>
+        <el-button link @click="$router.push('/wzry/team')">全部战队 <el-icon><ArrowRight /></el-icon></el-button>
       </div>
-      <div class="feature-grid">
-        <el-card class="feature-card">
-          <div class="feature-icon">
-            <el-icon :size="48"><Trophy /></el-icon>
-          </div>
-          <h3>战队管理</h3>
-          <p>创建和管理你的王者荣耀战队，招募队员，参加比赛</p>
-        </el-card>
-        <el-card class="feature-card">
-          <div class="feature-icon">
-            <el-icon :size="48"><FireFilled /></el-icon>
-          </div>
-          <h3>约战系统</h3>
-          <p>发布和接受约战，与其他高校的战队一决高下</p>
-        </el-card>
-        <el-card class="feature-card">
-          <div class="feature-icon">
-            <el-icon :size="48"><News /></el-icon>
-          </div>
-          <h3>赛事新闻</h3>
-          <p>了解最新的王者荣耀赛事动态和新闻</p>
-        </el-card>
+      <el-row :gutter="20" v-loading="loading">
+        <el-col :span="6" v-for="team in hotTeams" :key="team.id">
+          <el-card class="team-item-card" :body-style="{ padding: '0px' }" shadow="hover" @click="$router.push(`/wzry/team/${team.id}`)">
+            <div class="team-cover">
+              <img :src="team.logo || 'https://via.placeholder.com/300x200/eee/999?text=TEAM'" class="cover-img">
+            </div>
+            <div class="team-info">
+              <h3 class="team-name">{{ team.name }}</h3>
+              <p class="team-desc">{{ team.description || '该战队很懒，暂无简介...' }}</p>
+              <div class="team-footer">
+                <span class="stars"><el-icon><User /></el-icon> {{ team.memberCount }}人</span>
+                <el-button type="primary" link @click.stop="$router.push(`/wzry/team/${team.id}`)">详情</el-button>
+              </div>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+    </div>
+
+    <div class="section-wrapper" style="margin-top: 40px;">
+      <div class="section-header">
+        <h2 class="section-title">最新约战</h2>
+        <el-button link @click="$router.push('/wzry/match')">全部约战 <el-icon><ArrowRight /></el-icon></el-button>
       </div>
-      <div class="coming-soon">
-        <el-empty description="王者荣耀板块正在开发中，敬请期待！" :image-size="120" />
-      </div>
+      <el-row :gutter="20" v-loading="loading">
+        <el-col :span="6" v-for="room in latestMatches" :key="room.id">
+          <el-card class="match-room-card" shadow="hover" @click="$router.push(`/wzry/match/${room.id}`)">
+            <div class="room-header">
+              <el-tag :type="room.type === 1 ? 'warning' : 'success'" size="small" effect="dark">
+                {{ room.type === 1 ? '线下' : '线上' }}
+              </el-tag>
+            </div>
+            <h3 class="room-title">{{ room.title }}</h3>
+            <div class="room-info">
+              <div class="info-item">
+                <span class="label">发起战队：</span>
+                <span class="value host-team">{{ room.hostTeamName }}</span>
+                <el-tag v-if="room.hostUniversity" size="small" effect="plain" class="university-tag">{{ room.hostUniversity }}</el-tag>
+              </div>
+              <div v-if="room.guestTeamName" class="info-item">
+                <span class="label">应战战队：</span>
+                <span class="value">{{ room.guestTeamName }}</span>
+                <el-tag v-if="room.guestUniversity" size="small" effect="plain" class="university-tag">{{ room.guestUniversity }}</el-tag>
+              </div>
+              <div class="info-item">
+                <span class="label">开赛时间：</span>
+                <span class="value">{{ formatDate(room.matchTime) }}</span>
+              </div>
+              <div v-if="room.type === 1" class="info-item">
+                <span class="label">地点：</span>
+                <span class="value">{{ room.location }}</span>
+              </div>
+            </div>
+            <div class="room-footer">
+              <el-button 
+                v-if="room.status === 0" 
+                type="primary" 
+                class="join-btn" 
+                @click.stop="$router.push(`/wzry/match/${room.id}`)"
+              >立即应战</el-button>
+              <el-button 
+                v-else-if="room.status === 1" 
+                type="warning" 
+                class="join-btn"
+                disabled
+              >等待开赛</el-button>
+              <el-button 
+                v-else 
+                type="info" 
+                class="join-btn"
+                disabled
+              >已结束</el-button>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
     </div>
   </div>
 </template>
@@ -86,246 +103,212 @@ import request from '../../utils/request';
 
 const router = useRouter();
 const loading = ref(false);
-
-// 轮播图数据
-const bannerList = ref([
-  { image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80', title: '2026年高校王者荣耀春季巅峰赛' },
-  { image: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80', title: '王者荣耀全服集结：寻找最强校园战队' }
-]);
-
-// 混合新闻和公告
-const mixedNews = ref([]);
+const hotTeams = ref([]);
+const latestMatches = ref([]);
 
 const fetchData = async () => {
   loading.value = true;
   try {
-    // 动态获取 Banner
-    try {
-      const bannerRes = await request.get('/banner/active', { params: { gameProject: 'WZRY' } });
-      if (bannerRes.data && bannerRes.data.length > 0) {
-        bannerList.value = bannerRes.data;
-      }
-    } catch (e) {
-      console.warn('获取Banner失败，使用默认Banner', e);
-    }
+    // 获取热门战队
+    const teamsRes = await request.get('/team/list', { params: { gameProject: 'WZRY', page: 1, pageSize: 4 } });
+    hotTeams.value = teamsRes.data || [];
 
-    const [newsRes, noticeRes] = await Promise.all([
-      request.get('/news/list', { params: { gameProject: 'WZRY' } }),
-      request.get('/notice/list', { params: { gameProject: 'WZRY' } })
-    ]);
-
-    // 混合并排序新闻与公告
-    let notices = (noticeRes.data || []).map(item => ({ ...item, type: 'notice' }));
-    let news = (newsRes.data || []).map(item => ({ ...item, type: 'news' }));
-    mixedNews.value = [...notices, ...news]
-      .sort((a, b) => new Date(b.createTime) - new Date(a.createTime))
-      .slice(0, 7);
+    // 获取最新约战
+    const matchesRes = await request.get('/match-room/list', { params: { gameProject: 'WZRY', page: 1, pageSize: 4 } });
+    latestMatches.value = matchesRes.data || [];
   } catch (err) {
-    console.error(err);
+    console.error('获取WZRY板块数据失败', err);
   } finally {
     loading.value = false;
-  }
-};
-
-const goNewsDetail = (item) => {
-  if (item.type === 'news') {
-    router.push(`/wzry/news/${item.id}`);
-  } else {
-    router.push(`/wzry/notice/${item.id}`);
-  }
-};
-
-const handleBannerClick = (url) => {
-  if (url) {
-    if (url.startsWith('http')) {
-      window.open(url, '_blank');
-    } else {
-      router.push(url);
-    }
   }
 };
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
-  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  return `${date.getMonth()+1}月${date.getDate()}日 ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
 };
 
 onMounted(() => {
-  console.log('WZRY home page mounted');
   fetchData();
 });
 </script>
 
 <style scoped>
-.home-page {
+.wzry-home-page {
   padding: 20px 0;
 }
 
-/* 第一部分：横向排版 */
-.top-row {
-  display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 20px;
-  margin-bottom: 40px;
-  max-width: 1400px;
-  margin: 0 auto 40px;
-  padding: 0 20px;
-}
-
-.banner-box {
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-.banner-img {
-  width: 100%;
-  height: 100%;
-  background-size: cover;
-  background-position: center;
-  position: relative;
-}
-
-.banner-title {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: linear-gradient(transparent, rgba(0,0,0,0.8));
+.hero-section {
+  background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
   color: white;
-  padding: 30px 20px 15px;
-  font-size: 22px;
-  font-weight: bold;
-}
-
-.notice-card {
-  height: 400px;
-  border-radius: 12px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: bold;
-  color: #333;
-}
-
-.notice-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.notice-item {
-  padding: 12px 0;
-  border-bottom: 1px dashed #eee;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  transition: color 0.3s;
-}
-
-.notice-item:last-child { border-bottom: none; }
-
-.notice-item:hover { color: var(--primary); }
-
-.n-tag { margin-right: 10px; flex-shrink: 0; }
-
-.notice-text {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
-}
-
-.notice-date {
-  color: #999;
-  font-size: 13px;
-  margin-left: 10px;
-  flex-shrink: 0;
-}
-
-.section-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
-
-.section-header {
+  padding: 80px 0;
   text-align: center;
   margin-bottom: 40px;
 }
 
-.section-header h2 {
-  font-size: 32px;
+.hero-content h1 {
+  font-size: 48px;
+  margin-bottom: 20px;
+  font-weight: bold;
+}
+
+.hero-content p {
+  font-size: 18px;
+  margin-bottom: 30px;
+  opacity: 0.9;
+}
+
+.hero-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.section-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 24px;
   font-weight: bold;
   color: #333;
   margin: 0;
 }
 
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 30px;
-  margin-bottom: 40px;
+.team-item-card {
+  transition: transform 0.3s;
+  cursor: pointer;
 }
 
-.feature-card {
-  text-align: center;
-  padding: 30px;
+.team-item-card:hover {
+  transform: translateY(-5px);
+}
+
+.team-cover {
+  height: 160px;
+  overflow: hidden;
+}
+
+.cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   transition: transform 0.3s;
 }
 
-.feature-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+.team-item-card:hover .cover-img {
+  transform: scale(1.05);
 }
 
-.feature-icon {
-  margin-bottom: 20px;
-  color: var(--primary);
+.team-info {
+  padding: 15px;
 }
 
-.feature-card h3 {
-  font-size: 20px;
+.team-name {
+  font-size: 18px;
   font-weight: bold;
   margin: 0 0 10px 0;
   color: #333;
 }
 
-.feature-card p {
+.team-desc {
   font-size: 14px;
   color: #666;
-  line-height: 1.5;
-  margin: 0;
+  margin: 0 0 15px 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.coming-soon {
-  text-align: center;
-  padding: 60px 0;
-  background: #f8f9fa;
-  border-radius: 12px;
-  margin-top: 40px;
+.team-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-@media (max-width: 768px) {
-  .hero-content {
-    flex-direction: column;
-    text-align: center;
-  }
-  
-  .hero-text h1 {
-    font-size: 36px;
-  }
-  
-  .hero-buttons {
-    justify-content: center;
-  }
-  
-  .feature-grid {
-    grid-template-columns: 1fr;
-  }
+.stars {
+  font-size: 14px;
+  color: #999;
+}
+
+.match-room-card {
+  transition: transform 0.3s;
+  cursor: pointer;
+}
+
+.match-room-card:hover {
+  transform: translateY(-5px);
+}
+
+.room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.room-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 0 0 15px 0;
+  color: #333;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.room-info {
+  margin-bottom: 15px;
+}
+
+.info-item {
+  font-size: 14px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.label {
+  color: #999;
+  min-width: 80px;
+}
+
+.value {
+  color: #333;
+  font-weight: 500;
+}
+
+.host-team {
+  color: #ff4d4f;
+  font-weight: bold;
+}
+
+.university-tag {
+  margin-left: 5px;
+}
+
+.room-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.join-btn {
+  width: 100%;
 }
 </style>

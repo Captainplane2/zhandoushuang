@@ -43,10 +43,14 @@
           <el-menu-item index="/admin/notices">公告管理</el-menu-item>
           <el-menu-item index="/admin/messages">留言处理</el-menu-item>
         </el-sub-menu>
-        <el-menu-item index="/admin/settings">
-          <el-icon><Setting /></el-icon>
-          <span>系统设置</span>
-        </el-menu-item>
+        <el-sub-menu index="system-manage">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>系统管理</span>
+          </template>
+          <el-menu-item index="/admin/settings">系统设置</el-menu-item>
+          <el-menu-item index="/admin/game-projects">游戏板块管理</el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
 

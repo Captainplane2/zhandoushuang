@@ -80,53 +80,50 @@ const routes = [
         name: 'TeamManage',
         component: () => import('../views/team/management.vue')
       },
-      // CS2 板块路由
       {
-        path: 'cs2',
-        name: 'CS2Home',
-        component: () => import('../views/cs2/index.vue')
+        path: 'user/info',
+        name: 'UserInfoSelf',
+        component: () => import('../views/user/info.vue')
       },
       {
-        path: 'cs2/team',
-        name: 'CS2Team',
-        component: () => import('../views/cs2/team/list.vue')
+        path: ':gameProject',
+        name: 'GameProjectHome',
+        component: () => import('../views/game-project/index.vue')
       },
       {
-        path: 'cs2/team/:id',
-        name: 'CS2TeamDetail',
-        component: () => import('../views/cs2/team/detail.vue')
+        path: ':gameProject/team',
+        name: 'GameProjectTeam',
+        component: () => import('../views/game-project/team/list.vue')
       },
       {
-        path: 'cs2/team/manage',
-        name: 'CS2TeamManage',
-        component: () => import('../views/cs2/team/management.vue')
+        path: ':gameProject/team/:id',
+        name: 'GameProjectTeamDetail',
+        component: () => import('../views/game-project/team/detail.vue')
       },
       {
-        path: 'cs2/match',
-        name: 'CS2Match',
-        component: () => import('../views/cs2/match/list.vue')
+        path: ':gameProject/team/manage',
+        name: 'GameProjectTeamManage',
+        component: () => import('../views/game-project/team/management.vue')
       },
       {
-        path: 'cs2/match/:id',
-        name: 'CS2MatchDetail',
-        component: () => import('../views/cs2/match/detail.vue')
+        path: ':gameProject/match',
+        name: 'GameProjectMatch',
+        component: () => import('../views/game-project/match/list.vue')
       },
       {
-        path: 'cs2/match/manage',
-        name: 'CS2MatchManage',
-        component: () => import('../views/cs2/match/manage.vue')
+        path: ':gameProject/match/:id',
+        name: 'GameProjectMatchDetail',
+        component: () => import('../views/game-project/match/detail.vue')
       },
-      // LOL 板块路由
       {
-        path: 'lol',
-        name: 'LOLHome',
-        component: () => import('../views/lol/index.vue')
+        path: ':gameProject/match/manage',
+        name: 'GameProjectMatchManage',
+        component: () => import('../views/game-project/match/manage.vue')
       },
-      // WZRY 板块路由
       {
-        path: 'wzry',
-        name: 'WZRYHome',
-        component: () => import('../views/wzry/index.vue')
+        path: ':gameProject/user/profile',
+        name: 'GameProjectUserProfile',
+        component: () => import('../views/game-project/user/profile.vue')
       }
     ]
   },
@@ -179,6 +176,11 @@ const routes = [
         path: 'settings',
         name: 'AdminSettings',
         component: () => import('../views/admin/settings.vue')
+      },
+      {
+        path: 'game-projects',
+        name: 'AdminGameProjects',
+        component: () => import('../views/admin/game-projects.vue')
       }
     ]
   },

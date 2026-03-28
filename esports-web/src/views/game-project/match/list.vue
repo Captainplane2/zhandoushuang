@@ -1,10 +1,11 @@
 <template>
   <div class="match-page full-container">
     <div class="page-header">
-      <h1 class="page-title">约战大厅</h1>
+      <h1 class="page-title">{{ pageTitle }}</h1>
       <el-breadcrumb separator="/">
         <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
-        <el-breadcrumb-item>约战匹配</el-breadcrumb-item>
+        <el-breadcrumb-item v-if="gameProject">{{ gameProjectDisplayName }}</el-breadcrumb-item>
+        <el-breadcrumb-item>约战大厅</el-breadcrumb-item>
       </el-breadcrumb>
     </div>
 
@@ -13,11 +14,9 @@
       <div class="action-bar">
         <div class="filter-group">
           <el-radio-group v-model="filterProject" @change="fetchRooms">
-            <el-radio-button label="全部">全部项目</el-radio-button>
-            <el-radio-button label="LOL">英雄联盟</el-radio-button>
-            <el-radio-button label="王者荣耀">王者荣耀</el-radio-button>
-            <el-radio-button label="CS2">CS2</el-radio-button>
-            <el-radio-button label="无畏契约">无畏契约</el-radio-button>
+            <el-radio-button label="全部">全部状态</el-radio-button>
+            <el-radio-button :label="0">待匹配</el-radio-button>
+            <el-radio-button :label="1">已匹配</el-radio-button>
           </el-radio-group>
         </div>
         <el-button type="primary" size="large" icon="Plus" @click="handleCreateClick">发起约战</el-button>
@@ -27,7 +26,7 @@
       <div v-loading="loading" class="room-list">
         <el-row :gutter="20">
           <el-col :span="8" v-for="room in rooms" :key="room.id">
-            <el-card class="room-card" shadow="hover" @click="goToMatchDetail(room.id, room.gameProject)">
+            <el-card class="room-card" shadow="hover" @click="goToMatchDetail(room.id)">
               <div class="room-header">
                 <el-tag :type="room.type === 1 ? 'warning' : 'success'" size="small" effect="dark">
                   {{ room.type === 1 ? '线下' : '线上' }}
@@ -92,7 +91,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="约战项目" required>
-          <el-select v-model="createForm.gameProject" placeholder="请选择游戏" class="w-full">
+          <el-select v-model="createForm.gameProject" placeholder="请选择游戏" class="w-full" :disabled="!!gameProject">
             <el-option label="英雄联盟" value="LOL" />
             <el-option label="王者荣耀" value="王者荣耀" />
             <el-option label="CS2" value="CS2" />
@@ -152,14 +151,29 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { useUserStore } from '../../store/user';
-import request from '../../utils/request';
+import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useUserStore } from '../../../store/user';
+import { useGameProjectStore } from '../../../store/gameProject';
+import request from '../../../utils/request';
 import { ElMessage } from 'element-plus';
 
+const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+const gameProjectStore = useGameProjectStore();
+
+const gameProject = computed(() => route.params.gameProject?.toUpperCase() || null);
+const gameProjectDisplayName = computed(() => {
+  if (!gameProject.value) return '';
+  const project = gameProjectStore.getGameProjectByName(gameProject.value);
+  return project ? project.displayName : gameProject.value;
+});
+
+const pageTitle = computed(() => {
+  return gameProject.value ? `${gameProjectDisplayName.value} 约战大厅` : '约战大厅';
+});
+
 const loading = ref(false);
 const filterProject = ref('全部');
 const rooms = ref([]);
@@ -170,7 +184,7 @@ const createDialogVisible = ref(false);
 const selectedTeamId = ref(null);
 const createForm = ref({
   title: '',
-  gameProject: '',
+  gameProject: gameProject.value || '',
   type: 0,
   matchTime: '',
   location: '',
@@ -189,9 +203,11 @@ const currentRoomId = ref(null);
 const fetchRooms = async () => {
   loading.value = true;
   try {
-    const res = await request.get('/match-room/list', { 
-      params: { gameProject: filterProject.value } 
-    });
+    const params = { gameProject: gameProject.value };
+    if (filterProject.value !== '全部') {
+      params.status = filterProject.value;
+    }
+    const res = await request.get('/match-room/list', { params });
     rooms.value = res.data || [];
   } catch (err) {
     console.error(err);
@@ -221,6 +237,9 @@ const onTeamChange = (val) => {
   if (team) {
     createForm.value.hostTeamId = team.id;
     createForm.value.hostTeamName = team.name;
+    if (!gameProject.value) {
+      createForm.value.gameProject = team.gameProject;
+    }
   }
 };
 
@@ -263,31 +282,18 @@ const confirmJoinRoom = async () => {
   }
 };
 
-const goToMatchDetail = (roomId, gameProject) => {
-  // 根据游戏项目跳转到不同的详情页
-  if (gameProject === 'CS2') {
-    router.push(`/cs2/match/${roomId}`);
+const goToMatchDetail = (roomId) => {
+  if (gameProject.value) {
+    router.push(`/${gameProject.value}/match/${roomId}`);
   } else {
-    // 其他游戏使用通用详情页
     router.push(`/match/${roomId}`);
   }
 };
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
-  // 处理后端返回的时间字符串 (如: 2026-03-28T14:30:00 或 2026-03-28 14:30:00)
   const date = new Date(dateStr);
-  // 使用UTC方法避免时区转换问题，确保显示与数据库一致的时间
-  const month = date.getUTCMonth() + 1;
-  const day = date.getUTCDate();
-  let hours = date.getUTCHours();
-  const minutes = date.getUTCMinutes();
-  // 添加上午/下午标识
-  const period = hours < 12 ? '上午' : '下午';
-  // 转换为12小时制
-  hours = hours % 12;
-  if (hours === 0) hours = 12;
-  return `${month}月${day}日 ${period}${hours}:${String(minutes).padStart(2,'0')}`;
+  return `${date.getMonth()+1}月${date.getDate()}日 ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
 };
 
 onMounted(() => {

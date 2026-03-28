@@ -18,17 +18,28 @@
             :default-active="activeMenu"
             class="site-menu"
             router
+            :trigger="'click'"
+            :collapse-transition="false"
           >
             <el-menu-item index="/">首页</el-menu-item>
-            <el-sub-menu :index="currentGameIndex">
-              <template #title>{{ currentGameText }}</template>
-              <el-menu-item index="/cs2">CS2</el-menu-item>
-              <el-menu-item index="/lol">英雄联盟</el-menu-item>
-              <el-menu-item index="/wzry">王者荣耀</el-menu-item>
+            <!-- 游戏选择菜单 -->
+            <el-sub-menu :index="currentGameIndex" popper-append-to-body>
+              <template #title>
+                <div class="game-select-wrapper">
+                  <span class="game-select-title" @click.stop="goToGameHome">{{ currentGameText }}</span>
+                </div>
+              </template>
+              <el-menu-item index="/">全部游戏</el-menu-item>
+              <el-menu-item v-for="project in gameProjects" :key="project.name" :index="'/' + project.name">
+                {{ project.displayName }}
+              </el-menu-item>
+              <el-menu-item v-if="gameProjects.length === 0" index="/" disabled>
+                暂无游戏板块
+              </el-menu-item>
             </el-sub-menu>
-            <el-menu-item index="/team">战队信息</el-menu-item>
-            <el-menu-item index="/user/profile">选手信息</el-menu-item>
-            <el-menu-item index="/match">约战大厅</el-menu-item>
+            <el-menu-item :index="teamPath">战队信息</el-menu-item>
+            <el-menu-item :index="userPath">选手信息</el-menu-item>
+            <el-menu-item :index="matchPath">约战大厅</el-menu-item>
             <el-menu-item index="/community">蘸豆爽吧</el-menu-item>
             <el-menu-item index="/news">电竞新闻</el-menu-item>
             <el-menu-item index="/message">系统留言</el-menu-item>
@@ -138,12 +149,14 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '../store/user';
+import { useGameProjectStore } from '../store/gameProject';
 import { ElMessage } from 'element-plus';
 import request from '../utils/request';
 
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+const gameProjectStore = useGameProjectStore();
 
 // 网站配置
 const config = ref({
@@ -159,21 +172,61 @@ const searchType = ref('all');
 const currentGameText = ref('选择游戏');
 const currentGameIndex = ref('/game');
 
+// 动态路径计算
+const teamPath = computed(() => {
+  return gameProjectStore.getGameProjectPath('/team');
+});
+
+const matchPath = computed(() => {
+  return gameProjectStore.getGameProjectPath('/match');
+});
+
+const userPath = computed(() => {
+  return gameProjectStore.getGameProjectPath('/user/profile');
+});
+
+// 游戏板块列表
+const gameProjects = ref([]);
+
+// 获取游戏板块列表
+const fetchGameProjects = async () => {
+  try {
+    const res = await request.get('/game-project/list-enabled');
+    gameProjects.value = res.data || [];
+    await gameProjectStore.fetchGameProjects();
+  } catch (err) {
+    console.error('获取游戏板块列表失败', err);
+  }
+};
+
 // 监听路由变化，更新当前游戏名称
 const updateCurrentGame = () => {
   const path = route.path;
-  if (path.startsWith('/cs2')) {
-    currentGameText.value = 'CS2';
-    currentGameIndex.value = '/cs2';
-  } else if (path.startsWith('/lol')) {
-    currentGameText.value = '英雄联盟';
-    currentGameIndex.value = '/lol';
-  } else if (path.startsWith('/wzry')) {
-    currentGameText.value = '王者荣耀';
-    currentGameIndex.value = '/wzry';
+  const pathParts = path.split('/').filter(Boolean);
+  
+  if (pathParts.length > 0) {
+    const firstPart = pathParts[0];
+    const gameProject = gameProjects.value.find(p => p.name.toUpperCase() === firstPart.toUpperCase());
+    
+    if (gameProject) {
+      // 如果路径的第一部分是游戏板块，更新游戏选择
+      currentGameText.value = gameProject.displayName;
+      currentGameIndex.value = '/' + gameProject.name;
+      gameProjectStore.setCurrentGameProject(gameProject.name);
+    } else {
+      // 如果路径的第一部分不是游戏板块，保持当前游戏选择不变
+      // 只有当用户明确选择"全部游戏"时才重置
+      // 注意：这里不重置，保持之前的游戏选择
+    }
   } else {
-    currentGameText.value = '选择游戏';
-    currentGameIndex.value = '/game';
+    // 根路径，保持当前游戏选择不变
+  }
+};
+
+// 跳转到游戏首页
+const goToGameHome = () => {
+  if (currentGameIndex.value !== '/game' && currentGameIndex.value !== '/') {
+    router.push(currentGameIndex.value);
   }
 };
 
@@ -218,6 +271,7 @@ onMounted(() => {
   
   fetchConfig();
   fetchPendingCount();
+  fetchGameProjects();
   // 缩短轮询时间至 10 秒，提高实时性
   timer = setInterval(fetchPendingCount, 10000);
   // 监听全局事件，以便在 management.vue 操作后即时刷新
@@ -246,13 +300,13 @@ const handleCommand = (command) => {
   } else if (command === 'admin') {
     router.push('/admin');
   } else if (command === 'join-team' || command === 'create-team') {
-    router.push('/team'); // 跳转到战队大厅进行操作
+    router.push(teamPath.value);
   } else if (command === 'password') {
     pwdDialogVisible.value = true;
   } else if (command === 'manage-team') {
-    router.push('/team/manage'); // 修正为跳转到独立的战队管理页面
+    router.push(gameProjectStore.getGameProjectPath('/team/manage'));
   } else if (command === 'manage-match') {
-    router.push('/cs2/match/manage'); // 跳转到约战管理页面
+    router.push(gameProjectStore.getGameProjectPath('/match/manage'));
   }
 };
 
@@ -342,16 +396,132 @@ const handleUpdatePassword = async () => {
   border-bottom: none;
 }
 
-.site-menu :deep(.el-menu-item) {
+.site-menu :deep(.el-menu-item),
+.site-menu :deep(.el-sub-menu__title) {
   height: 64px;
   line-height: 64px;
   font-size: 15px;
   color: #333;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* 确保菜单项点击区域 */
+.site-menu :deep(.el-menu-item) {
+  padding: 0 20px;
+}
+
+/* 修复蓝条显示问题 - 首页激活时不延伸到选择游戏 */
+.site-menu :deep(.el-menu) {
+  position: relative;
+  z-index: 1;
 }
 
 .site-menu :deep(.el-menu-item.is-active) {
   color: var(--primary);
   border-bottom: 2px solid var(--primary);
+  position: relative;
+  z-index: 2;
+}
+
+/* 选择游戏下拉菜单激活时不显示蓝条 */
+.site-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  color: var(--primary);
+  border-bottom: none;
+  position: relative;
+  z-index: 2;
+}
+
+/* 当首页激活时，确保蓝条不延伸到选择游戏 */
+.site-menu :deep(.el-menu-item:nth-child(1).is-active) ~ .el-sub-menu .el-sub-menu__title,
+.site-menu :deep(.el-menu-item.is-active:first-child) {
+  border-bottom: 2px solid var(--primary);
+}
+
+/* 选择游戏菜单项单独样式 */
+.site-menu :deep(.el-sub-menu__title) {
+  border-bottom: none !important;
+}
+
+/* 修复下拉箭头与文字重叠问题 */
+.site-menu :deep(.el-sub-menu__title) {
+  display: flex;
+  align-items: center;
+  padding-right: 30px !important;
+}
+
+.game-select-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  position: relative;
+}
+
+.game-select-title {
+  cursor: pointer;
+  flex: 1;
+}
+
+.game-select-title:hover {
+  color: var(--primary);
+}
+
+/* 确保Element Plus的默认箭头能正常显示和点击 */
+.site-menu :deep(.el-sub-menu__title) {
+  display: flex;
+  align-items: center;
+  position: relative;
+  cursor: default;
+}
+
+.site-menu :deep(.el-sub-menu__title .el-sub-menu__icon-arrow) {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  z-index: 10;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 禁止鼠标悬浮显示下拉菜单，只有点击箭头才显示 */
+.site-menu :deep(.el-sub-menu:hover > .el-sub-menu__title) {
+  background-color: transparent !important;
+}
+
+/* 确保箭头点击区域 */
+.site-menu :deep(.el-sub-menu__icon-arrow) {
+  cursor: pointer;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+/* 确保蓝条不延伸 */
+.site-menu :deep(.el-menu) {
+  display: flex;
+  align-items: center;
+}
+
+.site-menu :deep(.el-sub-menu) {
+  position: relative;
+}
+
+.site-menu :deep(.el-sub-menu__title) {
+  padding: 0 20px;
+  white-space: nowrap;
 }
 
 .header-right {

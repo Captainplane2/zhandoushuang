@@ -22,17 +22,19 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(loginInterceptor)
                 .addPathPatterns("/api/**") // 拦截所有接口
                 .excludePathPatterns(
-                    "/api/user/login",      // 登录接口放行
-                    "/api/user/register",   // 注册接口放行
-                    "/api/notice/list",     // 公告列表放行
-                    "/api/notice/*",        // 公告详情放行
-                    "/api/news/list",       // 新闻列表放行
-                    "/api/news/*",         // 新闻详情放行
-                    "/api/team/list",       // 战队列表放行
-                    "/api/team/members/*",  // 战队成员放行
-                    "/api/match-room/list", // 约战列表放行
-                    "/api/banner/active",   // 首页Banner放行
-                    "/api/user/upload"      // 文件上传放行 (便于测试，实际生产应严格控制)
+                    "/api/user/login",           // 登录接口放行
+                    "/api/user/register",        // 注册接口放行
+                    "/api/notice/list",          // 公告列表放行
+                    "/api/notice/*",             // 公告详情放行
+                    "/api/news/list",            // 新闻列表放行
+                    "/api/news/*",               // 新闻详情放行
+                    "/api/team/list",            // 战队列表放行
+                    "/api/team/members/*",       // 战队成员放行
+                    "/api/match-room/list",      // 约战列表放行
+                    "/api/banner/active",        // 首页Banner放行
+                    "/api/game-project/list",    // 游戏板块列表放行
+                    "/api/game-project/list-enabled", // 启用的游戏板块列表放行
+                    "/api/user/upload"           // 文件上传放行 (便于测试，实际生产应严格控制)
                 );
     }
 

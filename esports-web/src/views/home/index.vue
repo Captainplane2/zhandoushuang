@@ -111,7 +111,7 @@
       <el-row :gutter="20" v-loading="loading">
         <el-col :span="6" v-for="team in teamList" :key="team.id">
           <!-- 3. 点击战队卡片跳转到战队详情页 -->
-          <el-card class="team-item-card" :body-style="{ padding: '0px' }" shadow="hover" @click="$router.push(`/team/${team.id}`)">
+          <el-card class="team-item-card" :body-style="{ padding: '0px' }" shadow="hover" @click="goToTeamDetail(team.id, team.gameProject)">
             <div class="team-cover">
               <img :src="team.logo || 'https://via.placeholder.com/300x200/eee/999?text=TEAM'" class="cover-img">
             </div>
@@ -120,7 +120,7 @@
               <p class="team-desc">{{ team.description || '该战队很懒，暂无简介...' }}</p>
               <div class="team-footer">
                 <span class="stars"><el-icon><User /></el-icon> {{ team.memberCount }}人</span>
-                <el-button type="primary" link @click.stop="$router.push(`/team/${team.id}`)">详情</el-button>
+                <el-button type="primary" link @click.stop="goToTeamDetail(team.id, team.gameProject)">详情</el-button>
               </div>
             </div>
           </el-card>
@@ -214,16 +214,46 @@ const handleBannerClick = (url) => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
-  return dateStr.split('T')[0];
+  // 处理后端返回的时间字符串 (如: 2026-03-28T14:30:00 或 2026-03-28 14:30:00)
+  const date = new Date(dateStr);
+  // 使用UTC方法避免时区转换问题，确保显示与数据库一致的时间
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  let hours = date.getUTCHours();
+  const minutes = date.getUTCMinutes();
+  // 添加上午/下午标识
+  const period = hours < 12 ? '上午' : '下午';
+  // 转换为12小时制
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  return `${month}月${day}日 ${period}${hours}:${String(minutes).padStart(2,'0')}`;
 };
 
 const goToMatchDetail = (roomId, gameProject) => {
   // 根据游戏项目跳转到不同的详情页
   if (gameProject === 'CS2') {
     router.push(`/cs2/match/${roomId}`);
+  } else if (gameProject === 'LOL') {
+    router.push(`/lol/match/${roomId}`);
+  } else if (gameProject === 'WZRY') {
+    router.push(`/wzry/match/${roomId}`);
   } else {
     // 其他游戏使用通用详情页
     router.push(`/match/${roomId}`);
+  }
+};
+
+const goToTeamDetail = (teamId, gameProject) => {
+  // 根据游戏项目跳转到不同的战队详情页
+  if (gameProject === 'CS2') {
+    router.push(`/cs2/team/${teamId}`);
+  } else if (gameProject === 'LOL') {
+    router.push(`/lol/team/${teamId}`);
+  } else if (gameProject === 'WZRY') {
+    router.push(`/wzry/team/${teamId}`);
+  } else {
+    // 其他游戏使用通用详情页
+    router.push(`/team/${teamId}`);
   }
 };
 
