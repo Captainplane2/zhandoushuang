@@ -28,6 +28,7 @@ public class MatchRoomService {
      */
     public MatchRoom createRoom(MatchRoom room) {
         room.setStatus(0); // 招募中
+        room.setMatchStatus(com.esports.zds.entity.MatchStatus.WAITING); // 同步设置matchStatus字段
         return matchRoomRepository.save(room);
     }
 
@@ -159,9 +160,28 @@ public class MatchRoomService {
         if (room.getHostTeamId().equals(guestTeamId)) {
             throw new RuntimeException("不能应战自己的房间");
         }
+        
+        // 获取应战战队信息，设置应战队长ID
+        Team guestTeam = teamService.getById(guestTeamId);
+        if (guestTeam == null) {
+            throw new RuntimeException("战队不存在");
+        }
+        
         room.setGuestTeamId(guestTeamId);
         room.setGuestTeamName(guestTeamName);
+        room.setGuestTeamLogo(guestTeam.getLogo());
+        room.setGuestUniversity(guestTeam.getUniversity());
+        
+        // 设置应战队长ID和昵称
+        if (guestTeam.getLeaderId() != null) {
+            userRepository.findById(guestTeam.getLeaderId()).ifPresent(user -> {
+                room.setGuestId(user.getId());
+                room.setGuestLeaderNickname(user.getNickname());
+            });
+        }
+        
         room.setStatus(1); // 已应战，待开打
+        room.setMatchStatus(com.esports.zds.entity.MatchStatus.READY); // 同步更新matchStatus字段
         return matchRoomRepository.save(room);
     }
 
@@ -174,6 +194,7 @@ public class MatchRoomService {
             throw new RuntimeException("只有发起人可以结束约战");
         }
         room.setStatus(2); // 已结束
+        room.setMatchStatus(com.esports.zds.entity.MatchStatus.FINISHED); // 同步更新matchStatus字段
         return matchRoomRepository.save(room);
     }
 
@@ -191,6 +212,42 @@ public class MatchRoomService {
             throw new RuntimeException("该房间已被应战或关闭，无法取消");
         }
         room.setStatus(3); // 已取消
+        room.setMatchStatus(com.esports.zds.entity.MatchStatus.CANCELLED); // 同步更新matchStatus字段
+        return matchRoomRepository.save(room);
+    }
+
+    /**
+     * 修复约战状态（临时方法，用于修复历史数据）
+     */
+    public MatchRoom fixMatchStatus(Long roomId) {
+        MatchRoom room = matchRoomRepository.findById(roomId).orElseThrow(() -> new RuntimeException("房间不存在"));
+        
+        // 根据status字段同步matchStatus字段
+        if (room.getStatus() == 0) {
+            room.setMatchStatus(com.esports.zds.entity.MatchStatus.WAITING);
+        } else if (room.getStatus() == 1) {
+            room.setMatchStatus(com.esports.zds.entity.MatchStatus.READY);
+        } else if (room.getStatus() == 2) {
+            room.setMatchStatus(com.esports.zds.entity.MatchStatus.FINISHED);
+        } else if (room.getStatus() == 3) {
+            room.setMatchStatus(com.esports.zds.entity.MatchStatus.CANCELLED);
+        }
+        
+        // 修复应战方队长ID（如果guestTeamId存在但guestId为空）
+        if (room.getGuestTeamId() != null && room.getGuestId() == null) {
+            Team guestTeam = teamService.getById(room.getGuestTeamId());
+            if (guestTeam != null && guestTeam.getLeaderId() != null) {
+                userRepository.findById(guestTeam.getLeaderId()).ifPresent(user -> {
+                    room.setGuestId(user.getId());
+                    room.setGuestLeaderNickname(user.getNickname());
+                    room.setGuestUniversity(guestTeam.getUniversity());
+                    room.setGuestTeamLogo(guestTeam.getLogo());
+                    System.out.println("修复应战队长ID - guestId: " + user.getId() + ", guestLeaderNickname: " + user.getNickname());
+                });
+            }
+        }
+        
+        System.out.println("修复约战状态 - ID: " + roomId + ", status: " + room.getStatus() + ", matchStatus: " + room.getMatchStatus() + ", guestId: " + room.getGuestId());
         return matchRoomRepository.save(room);
     }
 

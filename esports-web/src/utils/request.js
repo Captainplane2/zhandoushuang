@@ -35,6 +35,9 @@ service.interceptors.response.use(
       ElMessage.error('请先登录');
       localStorage.removeItem('token');
       // 可以跳转到登录页
+    } else if (error.message && error.message.includes('Network Error')) {
+      // 网络错误不显示提示，避免轮询时持续弹出
+      console.error('网络错误:', error);
     } else {
       ElMessage.error(error.message || '网络错误');
     }

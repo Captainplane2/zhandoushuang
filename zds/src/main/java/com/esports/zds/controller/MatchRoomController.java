@@ -103,4 +103,17 @@ public class MatchRoomController {
             return Result.error(500, "删除约赛记录失败");
         }
     }
+
+    /**
+     * [临时] 修复约战状态（用于修复历史数据）
+     */
+    @PostMapping("/fix-status/{roomId}")
+    public Result<MatchRoom> fixMatchStatus(@PathVariable Long roomId) {
+        try {
+            MatchRoom room = matchRoomService.fixMatchStatus(roomId);
+            return Result.success("约战状态已修复", room);
+        } catch (RuntimeException e) {
+            return Result.error(400, e.getMessage());
+        }
+    }
 }

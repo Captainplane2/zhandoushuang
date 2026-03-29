@@ -47,6 +47,30 @@
           <h2 class="team-name">{{ room.hostTeamName }}</h2>
           <p class="team-uni"><el-icon><School /></el-icon> {{ room.hostUniversity }}</p>
           <div class="host-badge">队长: {{ room.hostLeaderNickname || room.hostId }}</div>
+          
+          <!-- 发起方准备按钮 -->
+          <div v-if="room.status === 1 && isMatchStarted" class="ready-section">
+            <el-button
+              v-if="isHostLeader"
+              :type="hostReady ? 'success' : 'info'"
+              size="large"
+              class="ready-btn"
+              :disabled="!canPrepare"
+              @click.stop="toggleHostReady"
+            >
+              <el-icon v-if="hostReady"><Check /></el-icon>
+              {{ hostReady ? '已准备' : '未准备' }}
+            </el-button>
+            <el-tag 
+              v-else 
+              :type="hostReady ? 'success' : 'info'" 
+              size="large" 
+              class="ready-status"
+              :class="{ 'status-changed': hostReadyChanged }"
+            >
+              {{ hostReady ? '已准备' : '未准备' }}
+            </el-tag>
+          </div>
         </el-card>
 
         <div class="vs-icon">
@@ -69,7 +93,62 @@
           <h2 class="team-name">{{ room.guestTeamName }}</h2>
           <p class="team-uni"><el-icon><School /></el-icon> {{ room.guestUniversity }}</p>
           <div class="guest-badge">队长: {{ room.guestLeaderNickname || room.guestId }}</div>
+          
+          <!-- 应战方准备按钮 -->
+          <div v-if="room.status === 1 && isMatchStarted" class="ready-section">
+            <el-button
+              v-if="isGuestLeader"
+              :type="guestReady ? 'success' : 'info'"
+              size="large"
+              class="ready-btn"
+              :disabled="!canPrepare"
+              @click.stop="toggleGuestReady"
+            >
+              <el-icon v-if="guestReady"><Check /></el-icon>
+              {{ guestReady ? '已准备' : '未准备' }}
+            </el-button>
+            <el-tag 
+              v-else 
+              :type="guestReady ? 'success' : 'info'" 
+              size="large" 
+              class="ready-status"
+              :class="{ 'status-changed': guestReadyChanged }"
+            >
+              {{ guestReady ? '已准备' : '未准备' }}
+            </el-tag>
+          </div>
         </el-card>
+      </div>
+
+      <!-- 倒计时/开始比赛区域 -->
+      <div v-if="room && room.status === 1" class="match-action-section">
+        <!-- 等待开赛倒计时 -->
+        <div v-if="!isMatchStarted" class="countdown-box">
+          <div class="countdown-label">等待开赛</div>
+          <div class="countdown-time" :class="{ 'urgent': countdownSeconds < 60 }">
+            {{ formatCountdown(countdownSeconds) }}
+          </div>
+        </div>
+        
+        <!-- 开始比赛按钮 -->
+        <div v-else class="start-match-box">
+          <el-button
+            type="danger"
+            size="large"
+            class="start-match-btn"
+            :disabled="!canStartMatch || isMatchInProgress"
+            @click="startMatch"
+          >
+            <div class="btn-content">
+              <div class="btn-main">
+                {{ isMatchInProgress ? '比赛进行中' : `开始比赛 ${readyCount}/2` }}
+              </div>
+              <div v-if="showStartCountdown && !isMatchInProgress" class="btn-sub">
+                准备开赛 倒计时{{ startCountdown }}s
+              </div>
+            </div>
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -96,7 +175,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import request from '../../utils/request';
 import { ElMessage } from 'element-plus';
@@ -111,17 +190,112 @@ const joinDialogVisible = ref(false);
 const myTeams = ref([]);
 const selectedJoinTeamId = ref(null);
 
+// 倒计时相关
+const countdownSeconds = ref(0);
+const isMatchStarted = ref(false);
+let countdownTimer = null;
+
+// 准备状态
+const hostReady = ref(false);
+const guestReady = ref(false);
+
+// 状态变化动画
+const hostReadyChanged = ref(false);
+const guestReadyChanged = ref(false);
+
+// 开始比赛倒计时
+const showStartCountdown = ref(false);
+const startCountdown = ref(15);
+let startCountdownTimer = null;
+
+// 比赛是否正在进行中
+const isMatchInProgress = ref(false);
+
+// 轮询定时器
+let pollingTimer = null;
+
+// 计算属性：当前用户是否是发起方队长
+const isHostLeader = computed(() => {
+  return userStore.token && room.value && 
+    String(userStore.userInfo.id) === String(room.value.hostId);
+});
+
+// 计算属性：当前用户是否是应战方队长
+const isGuestLeader = computed(() => {
+  return userStore.token && room.value && 
+    String(userStore.userInfo.id) === String(room.value.guestId);
+});
+
+// 计算属性：已准备的队伍数量
+const readyCount = computed(() => {
+  let count = 0;
+  if (hostReady.value) count++;
+  if (guestReady.value) count++;
+  return count;
+});
+
+// 计算属性：是否可以开始比赛
+const canStartMatch = computed(() => {
+  return readyCount.value === 2;
+});
+
+// 计算属性：是否在允许准备的时间范围内
+const canPrepare = computed(() => {
+  if (!room.value || !room.value.matchTime) return false;
+  
+  // 添加调试日志
+  console.log('canPrepare检查 - room.value:', room.value);
+  console.log('canPrepare检查 - status:', room.value.status, 'matchStatus:', room.value.matchStatus);
+  
+  // 检查状态：必须是已应战状态
+  // status 是 Integer 类型，1 表示已应战
+  // matchStatus 可能是枚举字符串 "READY" 或数字 1
+  const isReadyStatus = room.value.status === 1 || 
+                        room.value.matchStatus === 'READY' || 
+                        room.value.matchStatus === 1;
+  
+  console.log('canPrepare检查 - isReadyStatus:', isReadyStatus);
+  
+  if (!isReadyStatus) return false;
+  
+  const matchTime = new Date(room.value.matchTime);
+  const now = new Date();
+  const thirtyMinutes = 30 * 60 * 1000;
+  
+  // 开始前30分钟内或开始后30分钟内
+  const timeDiff = Math.abs(matchTime - now);
+  const result = timeDiff <= thirtyMinutes;
+  
+  console.log('canPrepare检查 - timeDiff:', timeDiff, 'result:', result);
+  
+  return result;
+});
+
+// 计算属性：是否超过开赛时间30分钟
+const isOverdue = computed(() => {
+  if (!room.value || !room.value.matchTime) return false;
+  
+  const matchTime = new Date(room.value.matchTime);
+  const now = new Date();
+  const thirtyMinutes = 30 * 60 * 1000;
+  
+  // 超过开赛时间30分钟
+  return now - matchTime > thirtyMinutes;
+});
+
 const fetchDetail = async () => {
   const id = route.params.id;
   if (!id) return;
   
-  loading.value = true;
   try {
-    // 后端没有单个查询接口，我们从 list 接口中过滤
     const res = await request.get('/match-room/list');
     const r = res.data.find(item => item.id == id);
     if (r) {
       room.value = r;
+      // 检查比赛是否已开始
+      checkMatchStart();
+      // 获取准备状态
+      await fetchReadyStatus();
     } else {
       ElMessage.error('约战房间不存在');
     }
@@ -129,6 +303,259 @@ const fetchDetail = async () => {
     console.error(err);
   } finally {
     loading.value = false;
+  }
+};
+
+// 获取准备状态
+const fetchReadyStatus = async () => {
+  const id = route.params.id;
+  if (!id) return;
+  
+  try {
+    const res = await request.get(`/match-status/ready/${id}`);
+    if (res.code === 200) {
+      // 检查状态变化，触发动画
+      if (hostReady.value !== res.data.hostReady) {
+        hostReady.value = res.data.hostReady;
+        hostReadyChanged.value = true;
+        setTimeout(() => {
+          hostReadyChanged.value = false;
+        }, 1000);
+      }
+      if (guestReady.value !== res.data.guestReady) {
+        guestReady.value = res.data.guestReady;
+        guestReadyChanged.value = true;
+        setTimeout(() => {
+          guestReadyChanged.value = false;
+        }, 1000);
+      }
+      
+      // 同步比赛状态（从后端获取）
+      if (res.data.matchStatus === 'IN_PROGRESS') {
+        // 比赛正在进行中
+        isMatchInProgress.value = true;
+        showStartCountdown.value = false;
+        if (startCountdownTimer) {
+          clearInterval(startCountdownTimer);
+          startCountdownTimer = null;
+        }
+      } else {
+        // 同步倒计时信息（从后端获取）
+        if (res.data.countdownStartTime && res.data.countdownSeconds) {
+          // 如果后端有倒计时信息，同步到前端
+          const serverStartTime = new Date(res.data.countdownStartTime);
+          const now = new Date();
+          const elapsedSeconds = Math.floor((now - serverStartTime) / 1000);
+          const remainingSeconds = Math.max(0, res.data.countdownSeconds - elapsedSeconds);
+          
+          // 如果双方都已准备且倒计时正在进行，显示倒计时
+          if (hostReady.value && guestReady.value && remainingSeconds > 0) {
+            if (!showStartCountdown.value) {
+              showStartCountdown.value = true;
+              startCountdown.value = remainingSeconds;
+              startStartCountdown();
+            }
+          }
+        } else {
+          // 如果后端没有倒计时信息，重置前端倒计时
+          if (showStartCountdown.value) {
+            showStartCountdown.value = false;
+            startCountdown.value = 15;
+            if (startCountdownTimer) {
+              clearInterval(startCountdownTimer);
+              startCountdownTimer = null;
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('获取准备状态失败:', err);
+    // 不再显示错误提示，避免持续弹出
+  }
+};
+
+// 启动轮询
+const startPolling = () => {
+  if (pollingTimer) clearInterval(pollingTimer);
+  
+  // 每1秒轮询一次
+  pollingTimer = setInterval(() => {
+    if (isMatchStarted.value) {
+      fetchReadyStatus();
+    }
+  }, 1000);
+};
+
+// 检查比赛是否已开始（开赛时间已过）
+const checkMatchStart = () => {
+  if (!room.value || !room.value.matchTime) return;
+  
+  const matchTime = new Date(room.value.matchTime);
+  const now = new Date();
+  
+  if (now >= matchTime) {
+    isMatchStarted.value = true;
+  } else {
+    // 计算剩余秒数
+    const diff = Math.floor((matchTime - now) / 1000);
+    countdownSeconds.value = Math.max(0, diff);
+    startWaitingCountdown();
+  }
+};
+
+// 启动等待开赛倒计时
+const startWaitingCountdown = () => {
+  if (countdownTimer) clearInterval(countdownTimer);
+  
+  countdownTimer = setInterval(() => {
+    if (countdownSeconds.value > 0) {
+      countdownSeconds.value--;
+    } else {
+      isMatchStarted.value = true;
+      clearInterval(countdownTimer);
+    }
+  }, 1000);
+};
+
+// 格式化倒计时显示
+const formatCountdown = (seconds) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  
+  if (hours > 0) {
+    return `${hours}时${String(minutes).padStart(2, '0')}分${String(secs).padStart(2, '0')}秒`;
+  } else if (minutes > 0) {
+    return `${minutes}分${String(secs).padStart(2, '0')}秒`;
+  } else {
+    return `${secs}秒`;
+  }
+};
+
+// 切换发起方准备状态
+const toggleHostReady = async () => {
+  if (!canPrepare.value) {
+    if (isOverdue.value) {
+      ElMessage.warning('超时未开赛，比赛已取消');
+    } else {
+      ElMessage.warning('当前状态不允许准备操作');
+    }
+    return;
+  }
+  
+  try {
+    const id = route.params.id;
+    const response = await request.post(`/match-status/ready/${id}`, null, {
+      params: {
+        userId: Number(userStore.userInfo.id),
+        teamType: 'host'
+      }
+    });
+    
+    if (response.code === 200) {
+      hostReady.value = !hostReady.value;
+      checkBothReady();
+      ElMessage.success(hostReady.value ? '发起方已准备' : '发起方取消准备');
+    }
+  } catch (error) {
+    // 错误信息已在响应拦截器中显示，这里不再重复显示
+    console.error('准备操作失败:', error);
+  }
+};
+
+// 切换应战方准备状态
+const toggleGuestReady = async () => {
+  if (!canPrepare.value) {
+    if (isOverdue.value) {
+      ElMessage.warning('超时未开赛，比赛已取消');
+    } else {
+      ElMessage.warning('当前状态不允许准备操作');
+    }
+    return;
+  }
+  
+  try {
+    const id = route.params.id;
+    const response = await request.post(`/match-status/ready/${id}`, null, {
+      params: {
+        userId: Number(userStore.userInfo.id),
+        teamType: 'guest'
+      }
+    });
+    
+    if (response.code === 200) {
+      guestReady.value = !guestReady.value;
+      checkBothReady();
+      ElMessage.success(guestReady.value ? '应战方已准备' : '应战方取消准备');
+    }
+  } catch (error) {
+    // 错误信息已在响应拦截器中显示，这里不再重复显示
+    console.error('准备操作失败:', error);
+  }
+};
+
+// 检查双方是否都准备
+const checkBothReady = () => {
+  if (hostReady.value && guestReady.value) {
+    // 双方都已准备，启动开始比赛倒计时
+    if (!showStartCountdown.value) {
+      showStartCountdown.value = true;
+      startCountdown.value = 15;
+      startStartCountdown();
+    }
+  } else {
+    // 任何一方取消准备，重置倒计时
+    if (showStartCountdown.value) {
+      showStartCountdown.value = false;
+      startCountdown.value = 15;
+      if (startCountdownTimer) {
+        clearInterval(startCountdownTimer);
+        startCountdownTimer = null;
+      }
+    }
+  }
+};
+
+// 启动开始比赛倒计时
+const startStartCountdown = () => {
+  if (startCountdownTimer) clearInterval(startCountdownTimer);
+  
+  startCountdownTimer = setInterval(() => {
+    if (startCountdown.value > 0) {
+      startCountdown.value--;
+    } else {
+      // 倒计时结束，自动开始比赛
+      clearInterval(startCountdownTimer);
+      startMatch();
+    }
+  }, 1000);
+};
+
+// 开始比赛
+const startMatch = async () => {
+  if (!canStartMatch.value) {
+    ElMessage.warning('双方战队都需要准备后才能开始比赛');
+    return;
+  }
+  
+  try {
+    // 调用后端API开始比赛
+    const id = route.params.id;
+    const response = await request.post(`/match-status/start/${id}`);
+    
+    if (response.code === 200) {
+      isMatchInProgress.value = true;
+      showStartCountdown.value = false;
+      if (startCountdownTimer) {
+        clearInterval(startCountdownTimer);
+        startCountdownTimer = null;
+      }
+      ElMessage.success('比赛开始！');
+    }
+  } catch (error) {
+    console.error('开始比赛失败:', error);
+    ElMessage.error(error.message || '开始比赛失败');
   }
 };
 
@@ -145,9 +572,7 @@ const formatDate = (dateStr) => {
   const day = date.getDate();
   const hours = date.getHours();
   const minutes = date.getMinutes();
-  // 添加上午/下午标识
   const period = hours < 12 ? '上午' : '下午';
-  // 使用24小时制显示时间
   return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')} ${period}${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}`;
 };
 
@@ -155,7 +580,6 @@ const fetchMyTeams = async () => {
   if (!userStore.token) return;
   try {
     const res = await request.get(`/team/my/${userStore.userInfo.id}`);
-    // 仅列出自己是队长的战队
     myTeams.value = (res.data || []).filter(t => t.leaderId === userStore.userInfo.id);
   } catch (err) {
     console.error(err);
@@ -182,7 +606,7 @@ const confirmJoinRoom = async () => {
     });
     ElMessage.success('应战成功！');
     joinDialogVisible.value = false;
-    fetchDetail(); // 刷新数据
+    fetchDetail();
   } catch (err) {
     console.error(err);
   }
@@ -191,6 +615,13 @@ const confirmJoinRoom = async () => {
 onMounted(() => {
   fetchDetail();
   fetchMyTeams();
+  startPolling();
+});
+
+onUnmounted(() => {
+  if (countdownTimer) clearInterval(countdownTimer);
+  if (startCountdownTimer) clearInterval(startCountdownTimer);
+  if (pollingTimer) clearInterval(pollingTimer);
 });
 </script>
 
@@ -236,6 +667,7 @@ onMounted(() => {
   justify-content: center;
   gap: 30px;
   padding: 20px;
+  flex-wrap: wrap;
 }
 
 .team-card {
@@ -271,4 +703,202 @@ onMounted(() => {
 .empty-guest:hover { transform: none; }
 .waiting-box { padding: 40px 0; display: flex; flex-direction: column; align-items: center; gap: 15px; }
 .waiting-box p { color: #999; margin: 0; }
+
+/* 准备按钮区域 */
+.ready-section {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px dashed #e0e0e0;
+}
+
+.ready-btn {
+  width: 120px;
+  font-weight: bold;
+}
+
+.ready-btn .el-icon {
+  margin-right: 5px;
+}
+
+.ready-status {
+  font-weight: bold;
+  padding: 10px 20px;
+  width: 120px;
+  text-align: center;
+}
+
+/* 状态变化动画 */
+.status-changed {
+  animation: statusChange 1s ease-in-out;
+}
+
+@keyframes statusChange {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 比赛操作区域 */
+.match-action-section {
+  display: flex;
+  justify-content: center;
+  margin-top: 40px;
+  padding: 30px;
+}
+
+/* 倒计时框 */
+.countdown-box {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: 30px 60px;
+  text-align: center;
+  color: white;
+  box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+.countdown-label {
+  font-size: 18px;
+  margin-bottom: 10px;
+  opacity: 0.9;
+}
+
+.countdown-time {
+  font-size: 48px;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 2px;
+}
+
+.countdown-time.urgent {
+  color: #ff6b6b;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* 开始比赛按钮区域 */
+.start-match-box {
+  text-align: center;
+}
+
+.start-match-btn {
+  min-width: 280px;
+  min-height: 80px;
+  font-size: 20px;
+  font-weight: bold;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(245, 108, 108, 0.3);
+  transition: all 0.3s ease;
+}
+
+.start-match-btn:not(:disabled):hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(245, 108, 108, 0.4);
+}
+
+.start-match-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-main {
+  font-size: 22px;
+}
+
+.btn-sub {
+  font-size: 14px;
+  font-weight: normal;
+  opacity: 0.9;
+  animation: fadeInUp 0.3s ease;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 0.9;
+    transform: translateY(0);
+  }
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+  .vs-section {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .team-card {
+    width: 100%;
+    max-width: 320px;
+  }
+  
+  .vs-icon {
+    transform: rotate(90deg);
+  }
+  
+  .countdown-box {
+    padding: 20px 40px;
+  }
+  
+  .countdown-time {
+    font-size: 36px;
+  }
+  
+  .start-match-btn {
+    min-width: 240px;
+    min-height: 70px;
+    font-size: 18px;
+  }
+  
+  .btn-main {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .countdown-time {
+    font-size: 28px;
+  }
+  
+  .start-match-btn {
+    min-width: 200px;
+    min-height: 60px;
+  }
+  
+  .btn-main {
+    font-size: 18px;
+  }
+  
+  .btn-sub {
+    font-size: 12px;
+  }
+}
 </style>

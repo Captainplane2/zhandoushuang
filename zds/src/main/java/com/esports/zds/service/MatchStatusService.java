@@ -30,18 +30,31 @@ public class MatchStatusService {
     private MatchStatusHistoryRepository matchStatusHistoryRepository;
     
     /**
+     * 获取比赛房间
+     */
+    public MatchRoom getMatchRoom(Long matchId) {
+        return matchRoomRepository.findById(matchId)
+            .orElseThrow(() -> new RuntimeException("约战不存在"));
+    }
+    
+    /**
      * 准备/取消准备
      */
     @Transactional
     public MatchRoom toggleReady(Long matchId, Long userId, String teamType) {
-        MatchRoom room = matchRoomRepository.findById(matchId)
-            .orElseThrow(() -> new RuntimeException("约战不存在"));
+        MatchRoom room = getMatchRoom(matchId);
         
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new RuntimeException("用户不存在"));
         
+        // 添加调试日志
+        System.out.println("准备操作 - 用户ID: " + userId + ", 用户类型: " + teamType);
+        System.out.println("房间信息 - 发起方ID: " + room.getHostId() + ", 应战方ID: " + room.getGuestId());
+        System.out.println("用户信息 - ID: " + user.getId());
+        
         // 权限检查：必须是队长
         if (!isTeamLeader(room, user, teamType)) {
+            System.out.println("权限检查失败 - 用户不是队长");
             throw new RuntimeException("只有队长可以操作准备状态");
         }
         
@@ -71,10 +84,10 @@ public class MatchStatusService {
         recordStatusChange(room, room.getMatchStatus(), room.getMatchStatus(), userId, 
             teamType + "战队" + action);
         
-        // 如果双方都准备，开始倒计时
+        // 如果双方都准备，开始倒计时（15秒）
         if (room.getHostTeamReady() && room.getGuestTeamReady()) {
             room.setCountdownStartTime(LocalDateTime.now());
-            room.setCountdownSeconds(30);
+            room.setCountdownSeconds(15);
         } else {
             // 任意一方取消准备，重置倒计时
             room.setCountdownStartTime(null);

@@ -6,6 +6,8 @@ import com.esports.zds.common.Result;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 约战状态管理控制器
@@ -16,6 +18,27 @@ public class MatchStatusController {
     
     @Autowired
     private MatchStatusService matchStatusService;
+    
+    /**
+     * 获取准备状态
+     */
+    @GetMapping("/ready/{matchId}")
+    public Result<Map<String, Object>> getReadyStatus(@PathVariable Long matchId) {
+        try {
+            MatchRoom room = matchStatusService.getMatchRoom(matchId);
+            Map<String, Object> status = new HashMap<>();
+            status.put("hostReady", room.getHostTeamReady());
+            status.put("guestReady", room.getGuestTeamReady());
+            // 添加倒计时信息，用于双方同步
+            status.put("countdownStartTime", room.getCountdownStartTime());
+            status.put("countdownSeconds", room.getCountdownSeconds());
+            // 添加比赛状态，用于同步比赛是否已开始
+            status.put("matchStatus", room.getMatchStatus());
+            return Result.success(status);
+        } catch (RuntimeException e) {
+            return Result.error(400, e.getMessage());
+        }
+    }
     
     /**
      * 准备/取消准备

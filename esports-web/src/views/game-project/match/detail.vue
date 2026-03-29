@@ -95,13 +95,7 @@
         </el-card>
       </div>
 
-      <!-- 等待开赛区域 -->
-      <div v-if="room && room.status === 1" class="waiting-start-section">
-        <div class="waiting-card">
-          <span class="waiting-text">等待开赛</span>
-          <span v-if="countdown" class="countdown">{{ countdown }}</span>
-        </div>
-      </div>
+
       
       <!-- 状态管理面板 -->
       <MatchStatusPanel 

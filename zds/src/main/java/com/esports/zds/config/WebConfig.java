@@ -31,6 +31,7 @@ public class WebConfig implements WebMvcConfigurer {
                     "/api/team/list",            // 战队列表放行
                     "/api/team/members/*",       // 战队成员放行
                     "/api/match-room/list",      // 约战列表放行
+                    "/api/match-room/fix-status/*", // [临时]修复约战状态接口放行
                     "/api/banner/active",        // 首页Banner放行
                     "/api/game-project/list",    // 游戏板块列表放行
                     "/api/game-project/list-enabled", // 启用的游戏板块列表放行
